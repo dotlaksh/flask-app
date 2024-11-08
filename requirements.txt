@@ -1,2 +1,4 @@
 Flask==2.2.5
 yfinance==0.2.31
+gunicorn==20.1.0
+
