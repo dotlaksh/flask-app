@@ -18,10 +18,21 @@
         .scrollbar-track-gray-800::-webkit-scrollbar-track {
             background-color: #2d3748;
         }
+        .stock-item {
+            transition: background-color 0.3s ease, transform 0.3s ease;
+        }
+        .stock-item:hover {
+            background-color: #2d3748;
+            transform: translateY(-2px);
+        }
+        .stock-item.selected {
+            background-color: #3b82f6;
+            color: #ffffff;
+        }
     </style>
 </head>
 <body class="bg-dark text-light h-screen flex flex-col">
-    <nav class="bg-gray-800 py-4 px-6">
+    <nav class="bg-gray-800 py-4 px-6 shadow-lg">
         <div class="container mx-auto flex justify-between items-center">
             <a href="#" class="text-lg font-bold">StockView</a>
             <div class="flex items-center">
@@ -370,11 +381,11 @@
             const stockItems = document.querySelectorAll('.stock-item');
             stockItems.forEach((item, index) => {
                 if (item.dataset.symbol === symbol) {
-                    item.classList.add('bg-gray-700', 'text-black');
+                    item.classList.add('selected');
                     currentStockIndex = index;
                     item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else {
-                    item.classList.remove('bg-gray-700', 'text-black');
+                    item.classList.remove('selected');
                 }
             });
         }
