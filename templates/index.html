@@ -12,28 +12,46 @@
         .text-muted { color: #adb5bd; }
         .border-muted { border-color: #333; }
         .cursor-pointer { cursor: pointer; }
+        .scrollbar-thumb-gray-700::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+        }
+        .scrollbar-track-gray-800::-webkit-scrollbar-track {
+            background-color: #2d3748;
+        }
     </style>
 </head>
 <body class="bg-dark text-light h-screen flex flex-col">
     <nav class="bg-gray-800 py-4 px-6">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="#" class="text-lg font-bold">StockView 1.0</a>
+            <a href="#" class="text-lg font-bold">StockView</a>
+            <div class="flex items-center">
+                <div class="relative mr-4">
+                    <input type="text" id="searchInput" class="bg-gray-700 text-light rounded px-3 py-2 pr-8 w-64" placeholder="Search stocks..." />
+                    <button class="absolute right-2 top-1/2 transform -translate-y-1/2 focus:outline-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="relative">
+                    <select id="tableSelector" class="bg-gray-700 text-light rounded px-3 py-2 pr-8 cursor-pointer" onchange="loadStocksForTable(this.value)">
+                        {% for table in tables %}
+                            <option value="{{ table }}">{{ table }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
         </div>
     </nav>
     <div class="flex-1 overflow-hidden grid grid-cols-12 gap-4 p-6">
-        <div class="col-span-3 bg-gray-800 rounded-lg p-4 overflow-y-auto">
-            <select id="tableSelector" class="bg-gray-700 text-light rounded px-3 py-2 w-full mb-4" onchange="loadStocksForTable(this.value)">
-                {% for table in tables %}
-                    <option value="{{ table }}">{{ table }}</option>
-                {% endfor %}
-            </select>
+        <div class="col-span-3 bg-gray-800 rounded-lg p-4 overflow-y-auto scrollbar-thumb-gray-700 scrollbar-track-gray-800">
             <div class="stock-list" id="stockList">
                 <!-- Stock items will be dynamically inserted here -->
-            </div>
-            <div class="pagination pt-3 flex justify-center">
-                <button id="prevPage" class="bg-gray-700 text-light rounded px-3 py-2 mr-2" onclick="changePage(-1)">Previous</button>
-                <span id="pageInfo" class="mx-3 text-muted"></span>
-                <button id="nextPage" class="bg-gray-700 text-light rounded px-3 py-2 ml-2" onclick="changePage(1)">Next</button>
             </div>
         </div>
         <div class="col-span-6 bg-gray-800 rounded-lg p-4">
@@ -49,9 +67,282 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.16/dist/tailwind.min.js"></script>
     <script>
-        // Your existing JavaScript code goes here, with the following changes:
+        let priceChart = null;
+        let volumeChart = null;
+        let candlestickSeries = null;
+        let volumeSeries = null;
+        let currentSymbol = '';
+
+        let currentStockIndex = -1;
+        const ITEMS_PER_PAGE = 10;
+        let currentPage = 1;
+        let allStocks = JSON.parse('{{ stocks|tojson|safe }}');
+        let totalPages = Math.ceil(allStocks.length / ITEMS_PER_PAGE);
+
+        function initChart() {
+            if (priceChart) {
+                priceChart.remove();
+            }
+            if (volumeChart) {
+                volumeChart.remove();
+            }
+
+            const priceContainer = document.getElementById('price-chart');
+            priceChart = LightweightCharts.createChart(priceContainer, {
+                width: priceContainer.clientWidth,
+                height: priceContainer.clientHeight,
+                layout: {
+                    background: { color: '#131722' },
+                    textColor: '#DDD'
+                },
+                grid: {
+                    vertLines: { visible: false },
+                    horzLines: { visible: false }
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal
+                },
+                rightPriceScale: {
+                    borderColor: '#f0f0f0',
+                    scaleMargins: {
+                        top: 0.1,
+                        bottom: 0.2
+                    },
+                },
+                timeScale: {
+                    borderColor: '#f0f0f0',
+                    timeVisible: true,
+                    barSpacing: 15,
+                    rightOffset: 20
+                }
+            });
+
+            // Create and style legend container
+            const legend = document.createElement('div');
+            legend.style = `
+                position: absolute;
+                left: 12px;
+                top: 12px;
+                z-index: 1;
+                font-size: 14px;
+                font-family: sans-serif;
+                line-height: 18px;
+                font-weight: 300;
+                color: #ffffff;
+                padding: 8px;
+                background: rgba(19, 23, 34, 0.85);
+                border-radius: 4px;
+            `;
+            priceContainer.appendChild(legend);
+
+            // Helper functions for legend
+            const formatPrice = price => (Math.round(price * 100) / 100).toFixed(2);
+            const formatVolume = volume => {
+                if (volume >= 1000000) return (volume / 1000000).toFixed(2) + 'M';
+                if (volume >= 1000) return (volume / 1000).toFixed(2) + 'K';
+                return volume.toString();
+            };
+
+            const setTooltipHtml = (symbol, price, volume, time) => {
+                legend.innerHTML = `
+                    <div style="font-size: 20px; margin: 4px 0px;">${symbol}</div>
+                    <div style="font-size: 16px; margin: 4px 0px;">Price: ${price}</div>
+                    <div style="font-size: 16px; margin: 4px 0px;">Volume: ${volume}</div>
+                    <div style="font-size: 14px;">${time}</div>
+                `;
+            };
+
+            candlestickSeries = priceChart.addCandlestickSeries({
+                upColor: '#3ae62b',
+                downColor: '#f70e0e',
+                borderVisible: false,
+                wickUpColor: '#3ae62b',
+                wickDownColor: '#f70e0e'
+            });
+
+            const volumeContainer = document.getElementById('volume-chart');
+            volumeChart = LightweightCharts.createChart(volumeContainer, {
+                width: volumeContainer.clientWidth,
+                height: volumeContainer.clientHeight,
+                layout: {
+                    background: { color: '#131722' },
+                    textColor: '#DDD'
+                },
+                grid: {
+                    vertLines: { visible: false },
+                    horzLines: { visible: false }
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal
+                },
+                timeScale: {
+                    visible: true,
+                    borderColor: '#f0f0f0',
+                    timeVisible: true,
+                    rightOffset: 20
+                },
+            });
+
+            volumeSeries = volumeChart.addHistogramSeries({
+                color: '#26a69a',
+                priceFormat: {
+                    type: 'volume'
+                }
+            });
+            
+            // Subscribe to crosshair moves
+            priceChart.subscribeCrosshairMove(param => {
+                if (!param || !param.time || param.point.x < 0 || param.point.y < 0) {
+                    // Get last values when cursor is outside the chart
+                    const lastData = candlestickSeries.dataByIndex(
+                        candlestickSeries.dataByIndex(Number.MAX_SAFE_INTEGER, -1)
+                    );
+                    const lastVolume = volumeSeries.dataByIndex(
+                        volumeSeries.dataByIndex(Number.MAX_SAFE_INTEGER, -1)
+                    );
+                    if (lastData) {
+                        setTooltipHtml(
+                            currentSymbol || 'Stock',
+                            formatPrice(lastData.close),
+                            formatVolume(lastVolume.value),
+                            lastData.time
+                        );
+                    }
+                } else {
+                    // Get values at crosshair position
+                    const data = param.seriesData.get(candlestickSeries);
+                    const volumeData = param.seriesData.get(volumeSeries);
+                    if (data) {
+                        setTooltipHtml(
+                            currentSymbol || 'Stock',
+                            formatPrice(data.close),
+                            formatVolume(volumeData ? volumeData.value : 0),
+                            param.time
+                        );
+                    }
+                }
+            });
+
+            handleResize();
+        }
+
+        function prepareVolumeData(data) {
+            return data.map(item => ({
+                time: item.time,
+                value: item.volume,
+                color: item.close >= item.open ? '#3ae62b' : '#f70e0e'
+            }));
+        }
+
+        function displayStocks(page) {
+            const startIndex = (page - 1) * ITEMS_PER_PAGE;
+            const endIndex = startIndex + ITEMS_PER_PAGE;
+            const stocksToDisplay = allStocks.slice(startIndex, endIndex);
+
+            const stockList = document.getElementById('stockList');
+            stockList.innerHTML = '';
+
+            stocksToDisplay.forEach(stock => {
+                const stockItem = document.createElement('div');
+                stockItem.className = 'stock-item';
+                stockItem.setAttribute('data-symbol', stock.symbol);
+                stockItem.innerHTML = `
+                    <div class="stock-icon">${stock.symbol[0]}</div>
+                    <div class="stock-name">${stock.name}</div>
+                `;
+                stockItem.onclick = function() {
+                    loadChartData(stock.symbol);
+                };
+                stockList.appendChild(stockItem);
+            });
+
+            updatePaginationInfo();
+        }
+
+        function updatePaginationInfo() {
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('prevPage').disabled = currentPage === 1;
+            document.getElementById('nextPage').disabled = currentPage === totalPages;
+        }
+
+        function changePage(direction) {
+            currentPage += direction;
+            if (currentPage < 1) currentPage = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            displayStocks(currentPage);
+        }
+
+        // Add this new function to update TradingView widget
+        function updateTradingViewWidget(symbol) {
+            const widgetContainer = document.getElementById('tradingview-widget');
+            widgetContainer.innerHTML = `
+                <div class="tradingview-widget-container">
+                    <div class="tradingview-widget-container__widget"></div>
+                    
+                    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-financials.js" async>
+                    {
+                        "isTransparent": false,
+                        "largeChartUrl": "",
+                        "displayMode": "regular",
+                        "width": "100%",
+                        "height": 550,
+                        "colorTheme": "dark",
+                        "symbol": "AAPL",
+                        "locale": "en"
+                    }
+                    <\/script>
+                </div>
+            `;
+        }
+
+        // Modify the existing loadChartData function to update the widget
+        async function loadChartData(symbol) {
+            if (!symbol) return;
+            currentSymbol = symbol;
+
+            try {
+                if (!priceChart || !volumeChart) {
+                    initChart();
+                }
+
+                const encodedSymbol = encodeURIComponent(symbol);
+                const response = await fetch(`/get_stock_data?symbol=${encodedSymbol}`);
+
+                const data = await response.json();
+
+                const volumeData = prepareVolumeData(data);
+
+                priceChart.timeScale().fitContent();
+                volumeChart.timeScale().fitContent();
+
+                candlestickSeries.setData(data);
+                volumeSeries.setData(volumeData);
+
+                updateSelectedStock(symbol);
+                
+                // Update TradingView widget with the new symbol
+                updateTradingViewWidget(symbol);
+
+            } catch (error) {
+                console.error('Error loading chart data:', error);
+            }
+        }
+        async function loadStocksForTable(tableName) {
+            try {
+                const response = await fetch(`/get_stocks?table=${tableName}`);
+                allStocks = await response.json();
+                currentPage = 1;
+                totalPages = Math.ceil(allStocks.length / ITEMS_PER_PAGE);
+                displayStocks(currentPage);
+                
+                if (allStocks.length > 0) {
+                    loadChartData(allStocks[0].symbol);
+                }
+            } catch (error) {
+                console.error('Error loading stocks:', error);
+            }
+        }
 
         // Update handleResize function to use Tailwind's responsive classes
         function handleResize() {
@@ -106,6 +397,21 @@
                 loadChartData(symbol);
             }
         }
+
+        // Add search functionality
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const stockItems = document.querySelectorAll('.stock-item');
+            stockItems.forEach((item) => {
+                const stockName = item.querySelector('.stock-name').textContent.toLowerCase();
+                if (stockName.includes(searchTerm)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
     </script>
 </body>
 </html>
