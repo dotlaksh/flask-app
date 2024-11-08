@@ -1,0 +1,2 @@
+Flask==2.2.5
+yfinance==0.2.31
