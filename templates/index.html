@@ -3,102 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NSE Stock Chart</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.16/dist/tailwind.min.css" rel="stylesheet">
-    <script type="text/javascript" src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <title>StockView Pro</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.0.1/lightweight-charts.standalone.production.js"></script>
     <style>
-        .bg-dark { background-color: #131722; }
-        .text-light { color: #ffffff; }
-        .text-muted { color: #adb5bd; }
-        .border-muted { border-color: #333; }
-        .cursor-pointer { cursor: pointer; }
-        .scrollbar-thumb-gray-700::-webkit-scrollbar-thumb {
-            background-color: #4a5568;
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
         }
-        .scrollbar-track-gray-800::-webkit-scrollbar-track {
-            background-color: #2d3748;
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
         }
-        .stock-item {
-            transition: background-color 0.3s ease, transform 0.3s ease;
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
         }
-        .stock-item:hover {
-            background-color: #2d3748;
+        
+        /* Animations */
+        .stock-card {
+            transition: all 0.3s ease;
+        }
+        .stock-card:hover {
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
-        .stock-item.selected {
-            background-color: #3b82f6;
-            color: #ffffff;
+        
+        /* Glassmorphism */
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* Gradient Text */
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
     </style>
 </head>
-<body class="bg-dark text-light h-screen flex flex-col">
-    <nav class="bg-gray-800 py-4 px-6 shadow-lg">
-        <div class="container mx-auto flex justify-between items-center">
-            <a href="#" class="text-lg font-bold">StockView</a>
-            <div class="flex items-center">
-                <div class="relative mr-4">
-                    <input type="text" id="searchInput" class="bg-gray-700 text-light rounded px-3 py-2 pr-8 w-64" placeholder="Search stocks..." />
-                    <button class="absolute right-2 top-1/2 transform -translate-y-1/2 focus:outline-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass border-b border-gray-700">
+        <nav class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <h1 class="text-xl font-bold gradient-text">StockView Pro</h1>
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <input type="text" id="searchInput" 
+                               class="bg-gray-800 rounded-full px-4 py-2 pr-10 w-48 md:w-64 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                               placeholder="Search stocks...">
+                        <svg class="w-5 h-5 absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" 
+                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
-                    </button>
-                </div>
-                <div class="relative">
-                    <select id="tableSelector" class="bg-gray-700 text-light rounded px-3 py-2 pr-8 cursor-pointer" onchange="loadStocksForTable(this.value)">
+                    </div>
+                    <select id="tableSelector" 
+                            class="bg-gray-800 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
                         {% for table in tables %}
                             <option value="{{ table }}">{{ table }}</option>
                         {% endfor %}
                     </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 pt-20 pb-16">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Stock List -->
+            <div class="lg:col-span-3 bg-gray-800 rounded-xl p-4 h-[calc(100vh-8rem)]">
+                <div id="stockList" class="space-y-3 h-full overflow-y-auto custom-scrollbar">
+                    <!-- Stock cards will be inserted here -->
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="lg:col-span-9 space-y-6">
+                <!-- Interval Selector -->
+                <div class="flex overflow-x-auto custom-scrollbar pb-2">
+                    <div class="flex space-x-2">
+                        <button class="px-4 py-2 rounded-full bg-purple-600 hover:bg-purple-700 transition-colors">1D</button>
+                        <button class="px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">1W</button>
+                        <button class="px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">1M</button>
+                        <button class="px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">3M</button>
+                        <button class="px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">1Y</button>
+                        <button class="px-4 py-2 rounded-full bg-gray-700 hover:bg-gray-600 transition-colors">ALL</button>
                     </div>
+                </div>
+
+                <!-- Price Chart -->
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <div id="price-chart" class="h-[400px] md:h-[500px]"></div>
+                </div>
+
+                <!-- Volume Chart -->
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <div id="volume-chart" class="h-[200px]"></div>
                 </div>
             </div>
         </div>
-    </nav>
-    <div class="flex-1 overflow-hidden grid grid-cols-12 gap-4 p-6">
-        <div class="col-span-3 bg-gray-800 rounded-lg p-4 overflow-y-auto scrollbar-thumb-gray-700 scrollbar-track-gray-800">
-            <div class="stock-list" id="stockList">
-                <!-- Stock items will be dynamically inserted here -->
-            </div>
-        </div>
-        <div class="col-span-6 bg-gray-800 rounded-lg p-4">
-            <div class="charts-container h-full">
-                <div id="price-chart" class="h-3/4 border border-muted rounded-lg"></div>
-                <div id="volume-chart" class="h-1/4 border border-muted rounded-lg mt-4"></div>
-            </div>
-        </div>
-        <div class="col-span-3 bg-gray-800 rounded-lg p-4">
-            <div id="tradingview-widget" class="h-full">
-                <!-- TradingView Widget will be dynamically inserted here -->
-            </div>
-        </div>
-    </div>
+    </main>
 
     <script>
-        let priceChart = null;
-        let volumeChart = null;
-        let candlestickSeries = null;
-        let volumeSeries = null;
-        let currentSymbol = '';
+        // Stock Card Template
+        function createStockCard(stock, isSelected = false) {
+            return `
+                <div class="stock-card ${isSelected ? 'bg-purple-600' : 'bg-gray-700'} 
+                            rounded-xl p-4 cursor-pointer hover:bg-purple-500 transition-colors"
+                     data-symbol="${stock.symbol}">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold">${stock.symbol}</h3>
+                            <p class="text-sm text-gray-400">${stock.name}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold" id="price-${stock.symbol}">-</p>
+                            <p class="text-sm" id="change-${stock.symbol}">-</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
-        let currentStockIndex = -1;
-        const ITEMS_PER_PAGE = 10;
-        let currentPage = 1;
-        let allStocks = JSON.parse('{{ stocks|tojson|safe }}');
-        let totalPages = Math.ceil(allStocks.length / ITEMS_PER_PAGE);
-
-        function initChart() {
-            if (priceChart) {
-                priceChart.remove();
-            }
-            if (volumeChart) {
-                volumeChart.remove();
-            }
-
+        // Initialize and manage charts with improved mobile responsiveness
+        function initCharts() {
             const priceContainer = document.getElementById('price-chart');
             priceChart = LightweightCharts.createChart(priceContainer, {
                 width: priceContainer.clientWidth,
@@ -201,227 +235,55 @@
                     type: 'volume'
                 }
             });
-            
-            // Subscribe to crosshair moves
-            priceChart.subscribeCrosshairMove(param => {
-                if (!param || !param.time || param.point.x < 0 || param.point.y < 0) {
-                    // Get last values when cursor is outside the chart
-                    const lastData = candlestickSeries.dataByIndex(
-                        candlestickSeries.dataByIndex(Number.MAX_SAFE_INTEGER, -1)
-                    );
-                    const lastVolume = volumeSeries.dataByIndex(
-                        volumeSeries.dataByIndex(Number.MAX_SAFE_INTEGER, -1)
-                    );
-                    if (lastData) {
-                        setTooltipHtml(
-                            currentSymbol || 'Stock',
-                            formatPrice(lastData.close),
-                            formatVolume(lastVolume.value),
-                            lastData.time
-                        );
-                    }
-                } else {
-                    // Get values at crosshair position
-                    const data = param.seriesData.get(candlestickSeries);
-                    const volumeData = param.seriesData.get(volumeSeries);
-                    if (data) {
-                        setTooltipHtml(
-                            currentSymbol || 'Stock',
-                            formatPrice(data.close),
-                            formatVolume(volumeData ? volumeData.value : 0),
-                            param.time
-                        );
-                    }
-                }
+            const chartElement = document.getElementById('price-chart');
+            let touchStartX = 0;
+            let touchStartY = 0;
+
+            chartElement.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
             });
 
-            handleResize();
-        }
+            chartElement.addEventListener('touchmove', (e) => {
+                const touchEndX = e.touches[0].clientX;
+                const touchEndY = e.touches[0].clientY;
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
 
-        function prepareVolumeData(data) {
-            return data.map(item => ({
-                time: item.time,
-                value: item.volume,
-                color: item.close >= item.open ? '#3ae62b' : '#f70e0e'
-            }));
-        }
-
-        function displayStocks(page) {
-            const startIndex = (page - 1) * ITEMS_PER_PAGE;
-            const endIndex = startIndex + ITEMS_PER_PAGE;
-            const stocksToDisplay = allStocks.slice(startIndex, endIndex);
-
-            const stockList = document.getElementById('stockList');
-            stockList.innerHTML = '';
-
-            stocksToDisplay.forEach(stock => {
-                const stockItem = document.createElement('div');
-                stockItem.className = 'stock-item';
-                stockItem.setAttribute('data-symbol', stock.symbol);
-                stockItem.innerHTML = `
-                    <div class="stock-icon">${stock.symbol[0]}</div>
-                    <div class="stock-name">${stock.name}</div>
-                `;
-                stockItem.onclick = function() {
-                    loadChartData(stock.symbol);
-                };
-                stockList.appendChild(stockItem);
+                // Implement custom touch handling logic
+                if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                    e.preventDefault(); // Prevent horizontal scrolling
+                }
             });
-
-            updatePaginationInfo();
         }
 
-        function updatePaginationInfo() {
-            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
-            document.getElementById('prevPage').disabled = currentPage === 1;
-            document.getElementById('nextPage').disabled = currentPage === totalPages;
-        }
-
-        function changePage(direction) {
-            currentPage += direction;
-            if (currentPage < 1) currentPage = 1;
-            if (currentPage > totalPages) currentPage = totalPages;
-            displayStocks(currentPage);
-        }
-
-        // Add this new function to update TradingView widget
-        function updateTradingViewWidget(symbol) {
-            const widgetContainer = document.getElementById('tradingview-widget');
-            widgetContainer.innerHTML = `
-                <div class="tradingview-widget-container">
-                    <div class="tradingview-widget-container__widget"></div>
-                    
-                    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-financials.js" async>
-                    {
-                        "isTransparent": false,
-                        "largeChartUrl": "",
-                        "displayMode": "regular",
-                        "width": "100%",
-                        "height": 550,
-                        "colorTheme": "dark",
-                        "symbol": "AAPL",
-                        "locale": "en"
-                    }
-                    <\/script>
-                </div>
-            `;
-        }
-
-        // Modify the existing loadChartData function to update the widget
-        async function loadChartData(symbol) {
-            if (!symbol) return;
-            currentSymbol = symbol;
-
-            try {
-                if (!priceChart || !volumeChart) {
-                    initChart();
-                }
-
-                const encodedSymbol = encodeURIComponent(symbol);
-                const response = await fetch(`/get_stock_data?symbol=${encodedSymbol}`);
-
-                const data = await response.json();
-
-                const volumeData = prepareVolumeData(data);
-
-                priceChart.timeScale().fitContent();
-                volumeChart.timeScale().fitContent();
-
-                candlestickSeries.setData(data);
-                volumeSeries.setData(volumeData);
-
-                updateSelectedStock(symbol);
-                
-                // Update TradingView widget with the new symbol
-                updateTradingViewWidget(symbol);
-
-            } catch (error) {
-                console.error('Error loading chart data:', error);
-            }
-        }
-        async function loadStocksForTable(tableName) {
-            try {
-                const response = await fetch(`/get_stocks?table=${tableName}`);
-                allStocks = await response.json();
-                currentPage = 1;
-                totalPages = Math.ceil(allStocks.length / ITEMS_PER_PAGE);
-                displayStocks(currentPage);
-                
-                if (allStocks.length > 0) {
-                    loadChartData(allStocks[0].symbol);
-                }
-            } catch (error) {
-                console.error('Error loading stocks:', error);
-            }
-        }
-
-        // Update handleResize function to use Tailwind's responsive classes
+        // Responsive layout handling
         function handleResize() {
-            if (priceChart && volumeChart) {
-                const chartsContainer = document.querySelector('.charts-container');
-                const priceContainer = document.getElementById('price-chart');
-                const volumeContainer = document.getElementById('volume-chart');
-                
-                const containerHeight = chartsContainer.clientHeight;
-                
+            const width = window.innerWidth;
+            const isMobile = width < 768;
+
+            // Adjust chart options based on screen size
+            if (priceChart) {
                 priceChart.applyOptions({
-                    width: priceContainer.clientWidth,
-                    height: containerHeight * 0.7
+                    timeScale: {
+                        timeVisible: !isMobile,
+                        secondsVisible: false,
+                        tickMarkFormatter: (time) => {
+                            const date = new Date(time * 1000);
+                            return isMobile ? 
+                                date.toLocaleDateString() : 
+                                date.toLocaleString();
+                        }
+                    }
                 });
-                
-                volumeChart.applyOptions({
-                    width: volumeContainer.clientWidth,
-                    height: containerHeight * 0.25
-                });
             }
         }
 
-        // Update updateSelectedStock function to use Tailwind's classes
-        function updateSelectedStock(symbol) {
-            const stockItems = document.querySelectorAll('.stock-item');
-            stockItems.forEach((item, index) => {
-                if (item.dataset.symbol === symbol) {
-                    item.classList.add('selected');
-                    currentStockIndex = index;
-                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                } else {
-                    item.classList.remove('selected');
-                }
-            });
-        }
-
-        // Update handleKeyPress function to use Tailwind's classes
-        function handleKeyPress(event) {
-            const stockItems = document.querySelectorAll('.stock-item');
-            if (stockItems.length === 0) return;
-
-            if (event.key === 'ArrowUp') {
-                event.preventDefault();
-                currentStockIndex = Math.max(0, currentStockIndex - 1);
-                const symbol = stockItems[currentStockIndex].dataset.symbol;
-                loadChartData(symbol);
-            }
-            else if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                currentStockIndex = Math.min(stockItems.length - 1, currentStockIndex + 1);
-                const symbol = stockItems[currentStockIndex].dataset.symbol;
-                loadChartData(symbol);
-            }
-        }
-
-        // Add search functionality
-        const searchInput = document.getElementById('searchInput');
-        searchInput.addEventListener('input', function() {
-            const searchTerm = this.value.toLowerCase();
-            const stockItems = document.querySelectorAll('.stock-item');
-            stockItems.forEach((item) => {
-                const stockName = item.querySelector('.stock-name').textContent.toLowerCase();
-                if (stockName.includes(searchTerm)) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            window.addEventListener('resize', handleResize);
+            handleResize();
         });
     </script>
 </body>
