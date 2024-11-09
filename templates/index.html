@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StockView Pro</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.0.1/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.0.1/lightweight-charts.standalone.production.js" defer></script>
     <style>
         /* Custom Scrollbar */
         .custom-scrollbar::-webkit-scrollbar {
@@ -64,9 +64,6 @@
                     </div>
                     <select id="tableSelector" 
                             class="bg-gray-800 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        {% for table in tables %}
-                            <option value="{{ table }}">{{ table }}</option>
-                        {% endfor %}
                     </select>
                 </div>
             </div>
@@ -111,6 +108,8 @@
     </main>
 
     <script>
+        let priceChart, volumeChart, candlestickSeries, volumeSeries;
+
         // Stock Card Template
         function createStockCard(stock, isSelected = false) {
             return `
@@ -133,7 +132,20 @@
 
         // Initialize and manage charts with improved mobile responsiveness
         function initCharts() {
+            if (typeof LightweightCharts === 'undefined') {
+                console.error('LightweightCharts library not loaded yet');
+                return;
+            }
+
             const priceContainer = document.getElementById('price-chart');
+            const volumeContainer = document.getElementById('volume-chart');
+
+            if (!priceContainer || !volumeContainer) {
+                console.error('Chart containers not found');
+                return;
+            }
+
+            // Initialize price chart
             priceChart = LightweightCharts.createChart(priceContainer, {
                 width: priceContainer.clientWidth,
                 height: priceContainer.clientHeight,
@@ -163,7 +175,7 @@
                 }
             });
 
-            // Create and style legend container
+            // Create legend for price chart
             const legend = document.createElement('div');
             legend.style = `
                 position: absolute;
@@ -179,25 +191,10 @@
                 background: rgba(19, 23, 34, 0.85);
                 border-radius: 4px;
             `;
+            priceContainer.style.position = 'relative';
             priceContainer.appendChild(legend);
 
-            // Helper functions for legend
-            const formatPrice = price => (Math.round(price * 100) / 100).toFixed(2);
-            const formatVolume = volume => {
-                if (volume >= 1000000) return (volume / 1000000).toFixed(2) + 'M';
-                if (volume >= 1000) return (volume / 1000).toFixed(2) + 'K';
-                return volume.toString();
-            };
-
-            const setTooltipHtml = (symbol, price, volume, time) => {
-                legend.innerHTML = `
-                    <div style="font-size: 20px; margin: 4px 0px;">${symbol}</div>
-                    <div style="font-size: 16px; margin: 4px 0px;">Price: ${price}</div>
-                    <div style="font-size: 16px; margin: 4px 0px;">Volume: ${volume}</div>
-                    <div style="font-size: 14px;">${time}</div>
-                `;
-            };
-
+            // Initialize candlestick series
             candlestickSeries = priceChart.addCandlestickSeries({
                 upColor: '#3ae62b',
                 downColor: '#f70e0e',
@@ -206,7 +203,7 @@
                 wickDownColor: '#f70e0e'
             });
 
-            const volumeContainer = document.getElementById('volume-chart');
+            // Initialize volume chart
             volumeChart = LightweightCharts.createChart(volumeContainer, {
                 width: volumeContainer.clientWidth,
                 height: volumeContainer.clientHeight,
@@ -229,62 +226,65 @@
                 },
             });
 
+            // Initialize volume series
             volumeSeries = volumeChart.addHistogramSeries({
                 color: '#26a69a',
                 priceFormat: {
                     type: 'volume'
                 }
             });
-            const chartElement = document.getElementById('price-chart');
+
+            // Subscribe to window resize events
+            window.addEventListener('resize', () => {
+                priceChart.applyOptions({
+                    width: priceContainer.clientWidth,
+                    height: priceContainer.clientHeight
+                });
+                volumeChart.applyOptions({
+                    width: volumeContainer.clientWidth,
+                    height: volumeContainer.clientHeight
+                });
+            });
+
+            // Add touch handling for mobile
+            setupMobileTouch(priceContainer);
+        }
+
+        // Helper function for mobile touch handling
+        function setupMobileTouch(element) {
             let touchStartX = 0;
             let touchStartY = 0;
 
-            chartElement.addEventListener('touchstart', (e) => {
+            element.addEventListener('touchstart', (e) => {
                 touchStartX = e.touches[0].clientX;
                 touchStartY = e.touches[0].clientY;
-            });
+            }, { passive: false });
 
-            chartElement.addEventListener('touchmove', (e) => {
+            element.addEventListener('touchmove', (e) => {
+                if (!e.touches || !e.touches[0]) return;
+                
                 const touchEndX = e.touches[0].clientX;
                 const touchEndY = e.touches[0].clientY;
                 const deltaX = touchEndX - touchStartX;
                 const deltaY = touchEndY - touchStartY;
 
-                // Implement custom touch handling logic
                 if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                    e.preventDefault(); // Prevent horizontal scrolling
+                    e.preventDefault();
                 }
-            });
+            }, { passive: false });
         }
 
-        // Responsive layout handling
-        function handleResize() {
-            const width = window.innerWidth;
-            const isMobile = width < 768;
-
-            // Adjust chart options based on screen size
-            if (priceChart) {
-                priceChart.applyOptions({
-                    timeScale: {
-                        timeVisible: !isMobile,
-                        secondsVisible: false,
-                        tickMarkFormatter: (time) => {
-                            const date = new Date(time * 1000);
-                            return isMobile ? 
-                                date.toLocaleDateString() : 
-                                date.toLocaleString();
-                        }
-                    }
-                });
+        // Initialize charts when DOM is loaded and scripts are ready
+        function initialize() {
+            if (document.readyState === 'complete') {
+                initCharts();
+            } else {
+                window.addEventListener('load', initCharts);
             }
         }
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            initCharts();
-            window.addEventListener('resize', handleResize);
-            handleResize();
-        });
+        // Start initialization
+        initialize();
     </script>
 </body>
 </html>
